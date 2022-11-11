@@ -8,6 +8,8 @@ from statistics import median
 
 TIC_TIMEOUT = 0.1
 SS_SPEED = 10
+TOTAL_STARS = 100
+SHOT_PROBABILITY = 10
 
 SPACE_KEY_CODE = 32
 LEFT_KEY_CODE = 260
@@ -16,26 +18,17 @@ UP_KEY_CODE = 259
 DOWN_KEY_CODE = 258
 
 
-class Phase():
-    def __init__(self, row, column, symbol, delay, brightness):
-        self.row = row
-        self.column = column
-        self.symbol = symbol
-        self.delay = delay
-        self.brightness = brightness
-
-    def __await__(self):
-        return (yield self)
-
-
 async def blink(
-        row, column, symbol='*', animation_schema=(2, 0.3, 0.5, 0.3)
+        canvas, row, column, symbol='*', animation_schema=(2, 0.3, 0.5, 0.3)
         ):
     while True:
-        await Phase(row, column, symbol, animation_schema[0], curses.A_DIM)
-        await Phase(row, column, symbol, animation_schema[1], curses.A_NORMAL)
-        await Phase(row, column, symbol, animation_schema[2], curses.A_BOLD)
-        await Phase(row, column, symbol, animation_schema[3], curses.A_NORMAL)
+        for delay, brightness in zip(animation_schema, (
+                curses.A_DIM, curses.A_NORMAL, curses.A_BOLD, curses.A_NORMAL
+        )):
+            canvas.addstr(row, column, symbol, brightness)
+            while delay > 0:
+                delay -= TIC_TIMEOUT
+                await asyncio.sleep(0)
 
 
 async def fire(canvas, start_row, start_column, rows_speed=-0.3, columns_speed=0.0):
@@ -140,33 +133,74 @@ def get_frame_size(text):
     return rows, columns
 
 
-async def animate_spaceship(canvas, start_row:int, start_column:int, frame:str):    
-    draw_frame(canvas, start_row, start_column, frame, negative=False)
-    await asyncio.sleep(0)
-    draw_frame(canvas, start_row, start_column, frame, negative=True)
-    await asyncio.sleep(0)
+async def animate_spaceship(
+        canvas, start_row: int, start_column: int, frames: list, loop: list
+):
+    screen_height, screen_width = canvas.getmaxyx()
+    ss_raw, ss_column = start_row, start_column
+    prev_frame = ''
+    while True:
+        for frame in cycle(frames):
+            draw_frame(
+                canvas, round(ss_raw), round(ss_column), prev_frame, negative=True
+                )
+            rows_direction, columns_direction, _ = read_controls(canvas)
+            frame_rows, frame_cols = get_frame_size(frame)
+            ss_raw = median(
+                (
+                    1,
+                    ss_raw + rows_direction * TIC_TIMEOUT * SS_SPEED,
+                    screen_height - frame_rows - 1
+                )
+            )
+            ss_column = median(
+                (
+                    1,
+                    ss_column + columns_direction * TIC_TIMEOUT * SS_SPEED,
+                    screen_width - frame_cols - 1
+                )
+            )
+
+            # беспорядочная стрельба
+            if randint(1, 100) < SHOT_PROBABILITY:
+                loop.append(
+                    fire(
+                        canvas,
+                        round(ss_raw),
+                        round(ss_column) + 2,
+                        rows_speed=choice(
+                            [-5, -4, -3, -2, 2, 3, 4, 5]
+                            ) * TIC_TIMEOUT,
+                        columns_speed=choice(
+                            [-5, -4, -3, -2, 2, 3, 4, 5]
+                            ) * TIC_TIMEOUT
+                    )
+                )
+
+            draw_frame(canvas, round(ss_raw), round(ss_column), frame, negative=False)
+            prev_frame = frame
+            await asyncio.sleep(0)
 
 
 def draw(canvas):
-    with open(os.path.join('frames', 'rocket_frame_1.txt')) as file:
-        frame1 = file.read()
-    with open(os.path.join('frames', 'rocket_frame_2.txt')) as file:
-        frame2 = file.read()
-    frames = cycle((frame1, frame2))
-        
+    frames = []
+    for filename in ('rocket_frame_1.txt', 'rocket_frame_2.txt'):
+        with open(os.path.join('frames', filename)) as file:
+            frames.append(file.read().rstrip())
     
     canvas.border()
     curses.curs_set(False)
     canvas.nodelay(True)
     screen_height, screen_width = canvas.getmaxyx()
-    stars = []
+    sprites = []
 
-    for _ in range(100):
-        stars.append(
+    for _ in range(TOTAL_STARS):
+        sprites.append(
             blink(
+                canvas,
                 randint(2, screen_height - 2),
                 randint(2, screen_width - 2),
-                symbol=choice(list('+*.:')),
+                symbol=choice(list('+*.:°')),
                 animation_schema=(
                     TIC_TIMEOUT * randint(5, 25),
                     TIC_TIMEOUT * randint(2, 8),
@@ -176,57 +210,18 @@ def draw(canvas):
             )
         )
 
-    star_data = [[star, star.send(None)] for star in stars]
-    ss_raw = screen_height / 2
-    ss_column = screen_width / 2
-    shots = []
+    sprites.append(animate_spaceship(
+        canvas, screen_height / 2, screen_width / 2, frames, sprites
+    ))
     
     while True:
-        rows_direction, columns_direction, space_pressed = read_controls(canvas)
-        frame = next(frames)
-        frame_rows, frame_cols = get_frame_size(frame)
-        ss_raw = median((
-            1, 
-            ss_raw + rows_direction * TIC_TIMEOUT * SS_SPEED, 
-            screen_height - frame_rows - 1
-        ))
-        ss_column = median((
-            1, 
-            ss_column + columns_direction * TIC_TIMEOUT * SS_SPEED, 
-            screen_width - frame_cols - 1
-        ))
-        shots.append(animate_spaceship(canvas, round(ss_raw), round(ss_column), frame))
-        
-        if randint(1, 100) < 10:
-            shots.append(fire(
-                canvas,
-                round(ss_raw),
-                round(ss_column) + 2,
-                rows_speed=choice([-5, -4, -3, -2, 2, 3, 4, 5]) * TIC_TIMEOUT,
-                columns_speed=choice([-5, -4, -3, -2, 2, 3, 4, 5]) * TIC_TIMEOUT
-            ))
-        for _, phase in star_data:
-            canvas.addstr(
-                phase.row, phase.column, phase.symbol, phase.brightness
-                )
-            phase.delay -= TIC_TIMEOUT
-        
-        for shot in shots.copy():
+        for sprite in sprites.copy():
             try:
-                shot.send(None)
+                sprite.send(None)
             except StopIteration:
-                shots.remove(shot)
+                sprites.remove(sprite)
                 
         canvas.refresh()
-
-
-        change_phase = [[star, phase] for star, phase in star_data if
-                        phase.delay <= 0]
-        star_data = [[star, phase] for star, phase in star_data if
-                     phase.delay > 0]
-        for star, _ in change_phase:
-            star_data.append([star, star.send(None)])
-
         time.sleep(TIC_TIMEOUT)
 
 
