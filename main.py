@@ -10,6 +10,8 @@ TIC_TIMEOUT = 0.1
 SS_SPEED = 10
 TOTAL_STARS = 100
 SHOT_PROBABILITY = 10
+SHELL_SPEED = 5
+SCREE_BORDER_WIDTH = 1
 
 SPACE_KEY_CODE = 32
 LEFT_KEY_CODE = 260
@@ -31,7 +33,9 @@ async def blink(
                 await asyncio.sleep(0)
 
 
-async def fire(canvas, start_row, start_column, rows_speed=-0.3, columns_speed=0.0):
+async def fire(
+        canvas, start_row, start_column, rows_speed=-0.3, columns_speed=0.0
+):
     """Display animation of gun shot, direction and speed can be specified."""
 
     row, column = start_row, start_column
@@ -62,7 +66,8 @@ async def fire(canvas, start_row, start_column, rows_speed=-0.3, columns_speed=0
 
 
 def draw_frame(canvas, start_row, start_column, text, negative=False):
-    """Draw multiline text fragment on canvas, erase text instead of drawing if negative=True is specified."""
+    """Draw multiline text fragment on canvas,
+    erase text instead of drawing if negative=True is specified."""
 
     rows_number, columns_number = canvas.getmaxyx()
 
@@ -83,8 +88,9 @@ def draw_frame(canvas, start_row, start_column, text, negative=False):
             if symbol == ' ':
                 continue
 
-            # Check that current position it is not in a lower right corner of the window
-            # Curses will raise exception in that case. Don`t ask why…
+            # Check that current position it is not in a lower right corner of
+            # the window. Curses will raise exception in that case.
+            # Don`t ask why…
             # https://docs.python.org/3/library/curses.html#curses.window.addch
             if row == rows_number - 1 and column == columns_number - 1:
                 continue
@@ -95,7 +101,7 @@ def draw_frame(canvas, start_row, start_column, text, negative=False):
 
 def read_controls(canvas):
     """Read keys pressed and returns tuple witl controls state."""
-    
+
     rows_direction = columns_direction = 0
     space_pressed = False
 
@@ -120,13 +126,14 @@ def read_controls(canvas):
 
         if pressed_key_code == SPACE_KEY_CODE:
             space_pressed = True
-    
+
     return rows_direction, columns_direction, space_pressed
 
 
 def get_frame_size(text):
-    """Calculate size of multiline text fragment, return pair — number of rows and colums."""
-    
+    """Calculate size of multiline text fragment, return pair —
+    number of rows and colums."""
+
     lines = text.splitlines()
     rows = len(lines)
     columns = max([len(line) for line in lines])
@@ -138,48 +145,45 @@ async def animate_spaceship(
 ):
     screen_height, screen_width = canvas.getmaxyx()
     ss_raw, ss_column = start_row, start_column
-    prev_frame = ''
-    while True:
-        for frame in cycle(frames):
-            draw_frame(
-                canvas, round(ss_raw), round(ss_column), prev_frame, negative=True
-                )
-            rows_direction, columns_direction, _ = read_controls(canvas)
-            frame_rows, frame_cols = get_frame_size(frame)
-            ss_raw = median(
-                (
-                    1,
-                    ss_raw + rows_direction * TIC_TIMEOUT * SS_SPEED,
-                    screen_height - frame_rows - 1
-                )
+    for frame in cycle(frames):
+        rows_direction, columns_direction, _ = read_controls(canvas)
+        frame_rows, frame_cols = get_frame_size(frame)
+        ss_raw = median(
+            (
+                SCREE_BORDER_WIDTH,
+                ss_raw + rows_direction * TIC_TIMEOUT * SS_SPEED,
+                screen_height - frame_rows - SCREE_BORDER_WIDTH
             )
-            ss_column = median(
-                (
-                    1,
-                    ss_column + columns_direction * TIC_TIMEOUT * SS_SPEED,
-                    screen_width - frame_cols - 1
+        )
+        ss_column = median(
+            (
+                SCREE_BORDER_WIDTH,
+                ss_column + columns_direction * TIC_TIMEOUT * SS_SPEED,
+                screen_width - frame_cols - SCREE_BORDER_WIDTH
+            )
+        )
+
+        # беспорядочная стрельба
+        if randint(1, 100) < SHOT_PROBABILITY:
+            rows_speed = randint(-SHELL_SPEED, SHELL_SPEED) * TIC_TIMEOUT
+            columns_speed = (SHELL_SPEED ** 2 - rows_speed ** 2) ** 0.5
+            loop.append(
+                fire(
+                    canvas,
+                    round(ss_raw),
+                    round(ss_column) + 2,
+                    rows_speed=rows_speed,
+                    columns_speed=columns_speed
                 )
             )
 
-            # беспорядочная стрельба
-            if randint(1, 100) < SHOT_PROBABILITY:
-                loop.append(
-                    fire(
-                        canvas,
-                        round(ss_raw),
-                        round(ss_column) + 2,
-                        rows_speed=choice(
-                            [-5, -4, -3, -2, 2, 3, 4, 5]
-                            ) * TIC_TIMEOUT,
-                        columns_speed=choice(
-                            [-5, -4, -3, -2, 2, 3, 4, 5]
-                            ) * TIC_TIMEOUT
-                    )
-                )
-
-            draw_frame(canvas, round(ss_raw), round(ss_column), frame, negative=False)
-            prev_frame = frame
-            await asyncio.sleep(0)
+        draw_frame(
+            canvas, round(ss_raw), round(ss_column), frame, negative=False
+        )
+        await asyncio.sleep(0)
+        draw_frame(
+            canvas, round(ss_raw), round(ss_column), frame, negative=True
+            )
 
 
 def draw(canvas):
@@ -187,7 +191,7 @@ def draw(canvas):
     for filename in ('rocket_frame_1.txt', 'rocket_frame_2.txt'):
         with open(os.path.join('frames', filename)) as file:
             frames.append(file.read().rstrip())
-    
+
     canvas.border()
     curses.curs_set(False)
     canvas.nodelay(True)
@@ -213,14 +217,14 @@ def draw(canvas):
     sprites.append(animate_spaceship(
         canvas, screen_height / 2, screen_width / 2, frames, sprites
     ))
-    
+
     while True:
         for sprite in sprites.copy():
             try:
                 sprite.send(None)
             except StopIteration:
                 sprites.remove(sprite)
-                
+
         canvas.refresh()
         time.sleep(TIC_TIMEOUT)
 
