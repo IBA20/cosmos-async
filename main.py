@@ -10,7 +10,8 @@ TIC_TIMEOUT = 0.1
 SS_SPEED = 10
 TOTAL_STARS = 100
 SHOT_PROBABILITY = 10
-GARBAGE_PROBABILITY = 5
+MIN_GARBAGE_DELAY = 5
+MAX_GARBAGE_DELAY = 35
 SHELL_SPEED = 5
 SCREEN_BORDER_WIDTH = 1
 
@@ -81,6 +82,24 @@ async def fly_garbage(canvas, column, garbage_frame, speed=0.5):
         await asyncio.sleep(0)
         draw_frame(canvas, row, column, garbage_frame, negative=True)
         row += speed
+
+
+async def fill_orbit_with_garbage(canvas, loop: list):
+    screen_height, screen_width = canvas.getmaxyx()
+    garbage_frames = []
+    for filename in os.listdir('frames/garbage'):
+        with open(os.path.join('frames/garbage', filename)) as file:
+            garbage_frames.append(file.read().rstrip())
+    while True:
+        for _ in range(randint(MIN_GARBAGE_DELAY, MAX_GARBAGE_DELAY)):
+            await asyncio.sleep(0)
+        loop.append(
+            fly_garbage(
+                canvas,
+                randint(2, screen_width - 2),
+                choice(garbage_frames),
+            )
+        )
 
 
 def draw_frame(canvas, start_row, start_column, text, negative=False):
@@ -236,10 +255,7 @@ def draw(canvas):
         canvas, screen_height / 2, screen_width / 2, frames, sprites
     ))
 
-    garbage_frames = []
-    for filename in os.listdir('frames/garbage'):
-        with open(os.path.join('frames/garbage', filename)) as file:
-            garbage_frames.append(file.read().rstrip())
+    sprites.append(fill_orbit_with_garbage(canvas, sprites))
 
     while True:
         for sprite in sprites.copy():
@@ -247,12 +263,6 @@ def draw(canvas):
                 sprite.send(None)
             except StopIteration:
                 sprites.remove(sprite)
-
-        # выброс случайного мусора
-        if randint(1, 100) < GARBAGE_PROBABILITY:
-            sprites.append(fly_garbage(canvas,
-                                       randint(2, screen_width - 2),
-                                       choice(garbage_frames)))
 
         canvas.refresh()
         time.sleep(TIC_TIMEOUT)
