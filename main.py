@@ -90,17 +90,17 @@ def draw_frame(canvas, start_row, start_column, text, negative=False):
     rows_number, columns_number = canvas.getmaxyx()
 
     for row, line in enumerate(text.splitlines(), round(start_row)):
-        if row < 0:
+        if row < SCREEN_BORDER_WIDTH:
             continue
 
-        if row >= rows_number:
+        if row >= rows_number - SCREEN_BORDER_WIDTH:
             break
 
         for column, symbol in enumerate(line, round(start_column)):
-            if column < 0:
+            if column < SCREEN_BORDER_WIDTH:
                 continue
 
-            if column >= columns_number:
+            if column >= columns_number - SCREEN_BORDER_WIDTH:
                 break
 
             if symbol == ' ':
