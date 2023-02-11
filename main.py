@@ -10,8 +10,9 @@ TIC_TIMEOUT = 0.1
 SS_SPEED = 10
 TOTAL_STARS = 100
 SHOT_PROBABILITY = 10
+GARBAGE_PROBABILITY = 5
 SHELL_SPEED = 5
-SCREE_BORDER_WIDTH = 1
+SCREEN_BORDER_WIDTH = 1
 
 SPACE_KEY_CODE = 32
 LEFT_KEY_CODE = 260
@@ -65,6 +66,23 @@ async def fire(
         column += columns_speed
 
 
+async def fly_garbage(canvas, column, garbage_frame, speed=0.5):
+    """Animate garbage, flying from top to bottom.
+    Column position will stay same, as specified on start."""
+    rows_number, columns_number = canvas.getmaxyx()
+
+    column = max(column, 0)
+    column = min(column, columns_number - 1)
+
+    row = 0
+
+    while row < rows_number:
+        draw_frame(canvas, row, column, garbage_frame)
+        await asyncio.sleep(0)
+        draw_frame(canvas, row, column, garbage_frame, negative=True)
+        row += speed
+
+
 def draw_frame(canvas, start_row, start_column, text, negative=False):
     """Draw multiline text fragment on canvas,
     erase text instead of drawing if negative=True is specified."""
@@ -100,7 +118,7 @@ def draw_frame(canvas, start_row, start_column, text, negative=False):
 
 
 def read_controls(canvas):
-    """Read keys pressed and returns tuple witl controls state."""
+    """Read keys pressed and returns tuple with controls state."""
 
     rows_direction = columns_direction = 0
     space_pressed = False
@@ -132,7 +150,7 @@ def read_controls(canvas):
 
 def get_frame_size(text):
     """Calculate size of multiline text fragment, return pair —
-    number of rows and colums."""
+    number of rows and columns."""
 
     lines = text.splitlines()
     rows = len(lines)
@@ -150,16 +168,16 @@ async def animate_spaceship(
         frame_rows, frame_cols = get_frame_size(frame)
         ss_raw = median(
             (
-                SCREE_BORDER_WIDTH,
+                SCREEN_BORDER_WIDTH,
                 ss_raw + rows_direction * TIC_TIMEOUT * SS_SPEED,
-                screen_height - frame_rows - SCREE_BORDER_WIDTH
+                screen_height - frame_rows - SCREEN_BORDER_WIDTH
             )
         )
         ss_column = median(
             (
-                SCREE_BORDER_WIDTH,
+                SCREEN_BORDER_WIDTH,
                 ss_column + columns_direction * TIC_TIMEOUT * SS_SPEED,
-                screen_width - frame_cols - SCREE_BORDER_WIDTH
+                screen_width - frame_cols - SCREEN_BORDER_WIDTH
             )
         )
 
@@ -218,12 +236,23 @@ def draw(canvas):
         canvas, screen_height / 2, screen_width / 2, frames, sprites
     ))
 
+    garbage_frames = []
+    for filename in os.listdir('frames/garbage'):
+        with open(os.path.join('frames/garbage', filename)) as file:
+            garbage_frames.append(file.read().rstrip())
+
     while True:
         for sprite in sprites.copy():
             try:
                 sprite.send(None)
             except StopIteration:
                 sprites.remove(sprite)
+
+        # выброс случайного мусора
+        if randint(1, 100) < GARBAGE_PROBABILITY:
+            sprites.append(fly_garbage(canvas,
+                                       randint(2, screen_width - 2),
+                                       choice(garbage_frames)))
 
         canvas.refresh()
         time.sleep(TIC_TIMEOUT)
