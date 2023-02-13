@@ -1,10 +1,11 @@
-import time
 import curses
 import asyncio
 import os
 from random import randint, choice
 from itertools import cycle
 from statistics import median
+
+from physics import update_speed
 
 TIC_TIMEOUT = 0.1
 SS_SPEED = 10
@@ -178,25 +179,30 @@ def get_frame_size(text):
 
 async def animate_spaceship(canvas, start_row: int, start_column: int):
     frames = []
-    for filename in ('rocket_frame_1.txt', 'rocket_frame_2.txt'):
-        with open(os.path.join('frames', filename)) as file:
+    for filename in os.listdir('frames/rocket'):
+        with open(os.path.join('frames/rocket', filename)) as file:
             frames.append(file.read().rstrip())
     screen_height, screen_width = canvas.getmaxyx()
     ss_raw, ss_column = start_row, start_column
+    row_speed, column_speed = 0, 0
+    refresh = True
     for frame in cycle(frames):
         rows_direction, columns_direction, _ = read_controls(canvas)
+        row_speed, column_speed = update_speed(
+            row_speed, column_speed, rows_direction, columns_direction
+        )
         frame_rows, frame_cols = get_frame_size(frame)
         ss_raw = median(
             (
                 SCREEN_BORDER_WIDTH,
-                ss_raw + rows_direction * TIC_TIMEOUT * SS_SPEED,
+                ss_raw + row_speed * TIC_TIMEOUT * SS_SPEED,
                 screen_height - frame_rows - SCREEN_BORDER_WIDTH
             )
         )
         ss_column = median(
             (
                 SCREEN_BORDER_WIDTH,
-                ss_column + columns_direction * TIC_TIMEOUT * SS_SPEED,
+                ss_column + column_speed * TIC_TIMEOUT * SS_SPEED,
                 screen_width - frame_cols - SCREEN_BORDER_WIDTH
             )
         )
@@ -214,7 +220,10 @@ async def animate_spaceship(canvas, start_row: int, start_column: int):
         #             columns_speed=columns_speed
         #         )
         #     )
-
+        if refresh:
+            await asyncio.sleep(TIC_TIMEOUT)
+            refresh = not refresh
+            continue
         draw_frame(
             canvas, round(ss_raw), round(ss_column), frame, negative=False
         )
