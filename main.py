@@ -218,6 +218,7 @@ async def animate_spaceship(canvas, start_row: int, start_column: int):
         draw_frame(
             canvas, round(ss_raw), round(ss_column), frame, negative=False
         )
+        canvas.refresh()
         await asyncio.sleep(TIC_TIMEOUT)
         draw_frame(
             canvas, round(ss_raw), round(ss_column), frame, negative=True
@@ -252,9 +253,6 @@ def draw(canvas):
     )
     loop.create_task(fill_orbit_with_garbage(canvas, loop))
     loop.run_forever()
-    while True:
-        canvas.refresh()
-        time.sleep(TIC_TIMEOUT)
 
 
 if __name__ == '__main__':
