@@ -42,10 +42,10 @@ async def fire(
     row, column = start_row, start_column
 
     canvas.addstr(round(row), round(column), '*')
-    await asyncio.sleep(0)
+    await asyncio.sleep(TIC_TIMEOUT)
 
     canvas.addstr(round(row), round(column), 'O')
-    await asyncio.sleep(0)
+    await asyncio.sleep(TIC_TIMEOUT)
     canvas.addstr(round(row), round(column), ' ')
 
     row += rows_speed
@@ -60,7 +60,7 @@ async def fire(
 
     while 1 < row < max_row and 1 < column < max_column:
         canvas.addstr(round(row), round(column), symbol)
-        await asyncio.sleep(0)
+        await asyncio.sleep(TIC_TIMEOUT)
         canvas.addstr(round(row), round(column), ' ')
         row += rows_speed
         column += columns_speed
@@ -177,7 +177,7 @@ def get_frame_size(text):
     return rows, columns
 
 
-async def animate_spaceship(canvas, start_row: int, start_column: int):
+async def animate_spaceship(canvas, start_row: int, start_column: int, loop):
     frames = []
     for filename in os.listdir('frames/rocket'):
         with open(os.path.join('frames/rocket', filename)) as file:
@@ -187,7 +187,13 @@ async def animate_spaceship(canvas, start_row: int, start_column: int):
     row_speed, column_speed = 0, 0
     refresh = True
     for frame in cycle(frames):
-        rows_direction, columns_direction, _ = read_controls(canvas)
+        rows_direction, columns_direction, space_pressed = read_controls(canvas)
+        if space_pressed:
+            loop.create_task(fire(
+                    canvas,
+                    round(ss_raw),
+                    round(ss_column) + 2,
+                ))
         row_speed, column_speed = update_speed(
             row_speed, column_speed, rows_direction, columns_direction
         )
@@ -207,19 +213,6 @@ async def animate_spaceship(canvas, start_row: int, start_column: int):
             )
         )
 
-        # беспорядочная стрельба
-        # if randint(1, 100) < SHOT_PROBABILITY:
-        #     rows_speed = randint(-SHELL_SPEED, SHELL_SPEED) * TIC_TIMEOUT
-        #     columns_speed = (SHELL_SPEED ** 2 - rows_speed ** 2) ** 0.5
-        #     loop.append(
-        #         fire(
-        #             canvas,
-        #             round(ss_raw),
-        #             round(ss_column) + 2,
-        #             rows_speed=rows_speed,
-        #             columns_speed=columns_speed
-        #         )
-        #     )
         if refresh:
             await asyncio.sleep(TIC_TIMEOUT)
             refresh = not refresh
@@ -258,7 +251,7 @@ def draw(canvas):
         )
 
     loop.create_task(
-        animate_spaceship(canvas, screen_height / 2, screen_width / 2)
+        animate_spaceship(canvas, screen_height / 2, screen_width / 2, loop)
     )
     loop.create_task(fill_orbit_with_garbage(canvas, loop))
     loop.run_forever()
