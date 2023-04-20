@@ -89,7 +89,7 @@ async def fly_garbage(canvas, column, garbage_frame, speed=0.5):
         row += speed
 
 
-async def fill_orbit_with_garbage(canvas, loop: list):
+async def fill_orbit_with_garbage(canvas):
     screen_height, screen_width = canvas.getmaxyx()
     garbage_frames = []
     for filename in os.listdir('frames/garbage'):
@@ -97,7 +97,7 @@ async def fill_orbit_with_garbage(canvas, loop: list):
             garbage_frames.append(file.read().rstrip())
     while True:
         await sleep(randint(MIN_GARBAGE_DELAY, MAX_GARBAGE_DELAY))
-        loop.append(
+        sprites.append(
             fly_garbage(
                 canvas,
                 randint(2, screen_width - 2),
@@ -182,13 +182,13 @@ def get_frame_size(text):
 
 
 async def animate_spaceship(
-        canvas, start_row: int, start_column: int, frames: list, loop: list
+        canvas, start_row: int, start_column: int, frames: list
 ):
     screen_height, screen_width = canvas.getmaxyx()
     ss_raw, ss_column = start_row, start_column
     row_speed, column_speed = 0, 0
     for frame in cycle(frames):
-        rows_direction, columns_direction, _ = read_controls(canvas)
+        rows_direction, columns_direction, shot = read_controls(canvas)
         row_speed, column_speed = update_speed(
             row_speed, column_speed, rows_direction, columns_direction
         )
@@ -208,19 +208,15 @@ async def animate_spaceship(
             )
         )
 
-        # беспорядочная стрельба
-        # if randint(1, 100) < SHOT_PROBABILITY:
-        #     rows_speed = randint(-SHELL_SPEED, SHELL_SPEED) * TIC_TIMEOUT
-        #     columns_speed = (SHELL_SPEED ** 2 - rows_speed ** 2) ** 0.5
-        #     loop.append(
-        #         fire(
-        #             canvas,
-        #             round(ss_raw),
-        #             round(ss_column) + 2,
-        #             rows_speed=rows_speed,
-        #             columns_speed=columns_speed
-        #         )
-        #     )
+        if shot:
+            sprites.append(fire(
+                canvas,
+                round(ss_raw),
+                round(ss_column) + 2,
+                rows_speed=-1,
+                columns_speed=0
+            ))
+
         draw_frame(
             canvas, round(ss_raw), round(ss_column), frame, negative=False
         )
@@ -240,7 +236,6 @@ def draw(canvas):
     curses.curs_set(False)
     canvas.nodelay(True)
     screen_height, screen_width = canvas.getmaxyx()
-    sprites = []
 
     for _ in range(TOTAL_STARS):
         sprites.append(
@@ -259,10 +254,10 @@ def draw(canvas):
         )
 
     sprites.append(animate_spaceship(
-        canvas, screen_height / 2, screen_width / 2, frames, sprites
+        canvas, screen_height / 2, screen_width / 2, frames
     ))
 
-    sprites.append(fill_orbit_with_garbage(canvas, sprites))
+    sprites.append(fill_orbit_with_garbage(canvas))
 
     while True:
         for sprite in sprites.copy():
@@ -276,5 +271,6 @@ def draw(canvas):
 
 
 if __name__ == '__main__':
+    sprites = []
     curses.update_lines_cols()
     curses.wrapper(draw)
