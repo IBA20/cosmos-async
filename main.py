@@ -1,11 +1,10 @@
+import time
 import curses
 import asyncio
 import os
 from random import randint, choice
 from itertools import cycle
 from statistics import median
-
-from physics import update_speed
 
 TIC_TIMEOUT = 0.1
 SS_SPEED = 10
@@ -23,6 +22,11 @@ UP_KEY_CODE = 259
 DOWN_KEY_CODE = 258
 
 
+async def sleep(tics=1):
+    for _ in range(tics):
+        await asyncio.sleep(0)
+
+
 async def blink(
         canvas, row, column, symbol='*', animation_schema=(2, 0.3, 0.5, 0.3)
         ):
@@ -31,7 +35,7 @@ async def blink(
                 curses.A_DIM, curses.A_NORMAL, curses.A_BOLD, curses.A_NORMAL
         )):
             canvas.addstr(row, column, symbol, brightness)
-            await asyncio.sleep(delay)
+            await sleep(int(delay / TIC_TIMEOUT))
 
 
 async def fire(
@@ -42,10 +46,10 @@ async def fire(
     row, column = start_row, start_column
 
     canvas.addstr(round(row), round(column), '*')
-    await asyncio.sleep(TIC_TIMEOUT)
+    await sleep(1)
 
     canvas.addstr(round(row), round(column), 'O')
-    await asyncio.sleep(TIC_TIMEOUT)
+    await sleep(1)
     canvas.addstr(round(row), round(column), ' ')
 
     row += rows_speed
@@ -60,7 +64,7 @@ async def fire(
 
     while 1 < row < max_row and 1 < column < max_column:
         canvas.addstr(round(row), round(column), symbol)
-        await asyncio.sleep(TIC_TIMEOUT)
+        await sleep(1)
         canvas.addstr(round(row), round(column), ' ')
         row += rows_speed
         column += columns_speed
@@ -78,22 +82,20 @@ async def fly_garbage(canvas, column, garbage_frame, speed=0.5):
 
     while row < rows_number:
         draw_frame(canvas, row, column, garbage_frame)
-        await asyncio.sleep(TIC_TIMEOUT)
+        await sleep(1)
         draw_frame(canvas, row, column, garbage_frame, negative=True)
         row += speed
 
 
-async def fill_orbit_with_garbage(canvas, loop):
+async def fill_orbit_with_garbage(canvas, loop: list):
     screen_height, screen_width = canvas.getmaxyx()
     garbage_frames = []
     for filename in os.listdir('frames/garbage'):
         with open(os.path.join('frames/garbage', filename)) as file:
             garbage_frames.append(file.read().rstrip())
     while True:
-        await asyncio.sleep(
-            randint(MIN_GARBAGE_DELAY, MAX_GARBAGE_DELAY) * TIC_TIMEOUT
-        )
-        loop.create_task(
+        await sleep(randint(MIN_GARBAGE_DELAY, MAX_GARBAGE_DELAY))
+        loop.append(
             fly_garbage(
                 canvas,
                 randint(2, screen_width - 2),
@@ -177,65 +179,66 @@ def get_frame_size(text):
     return rows, columns
 
 
-async def animate_spaceship(canvas, start_row: int, start_column: int, loop):
-    frames = []
-    for filename in os.listdir('frames/rocket'):
-        with open(os.path.join('frames/rocket', filename)) as file:
-            frames.append(file.read().rstrip())
+async def animate_spaceship(
+        canvas, start_row: int, start_column: int, frames: list, loop: list
+):
     screen_height, screen_width = canvas.getmaxyx()
     ss_raw, ss_column = start_row, start_column
-    row_speed, column_speed = 0, 0
-    refresh = True
     for frame in cycle(frames):
-        rows_direction, columns_direction, space_pressed = read_controls(canvas)
-        if space_pressed:
-            loop.create_task(fire(
-                    canvas,
-                    round(ss_raw),
-                    round(ss_column) + 2,
-                ))
-        row_speed, column_speed = update_speed(
-            row_speed, column_speed, rows_direction, columns_direction
-        )
+        rows_direction, columns_direction, _ = read_controls(canvas)
         frame_rows, frame_cols = get_frame_size(frame)
         ss_raw = median(
             (
                 SCREEN_BORDER_WIDTH,
-                ss_raw + row_speed * TIC_TIMEOUT * SS_SPEED,
+                ss_raw + rows_direction * TIC_TIMEOUT * SS_SPEED,
                 screen_height - frame_rows - SCREEN_BORDER_WIDTH
             )
         )
         ss_column = median(
             (
                 SCREEN_BORDER_WIDTH,
-                ss_column + column_speed * TIC_TIMEOUT * SS_SPEED,
+                ss_column + columns_direction * TIC_TIMEOUT * SS_SPEED,
                 screen_width - frame_cols - SCREEN_BORDER_WIDTH
             )
         )
 
-        if refresh:
-            await asyncio.sleep(TIC_TIMEOUT)
-            refresh = not refresh
-            continue
+        # беспорядочная стрельба
+        if randint(1, 100) < SHOT_PROBABILITY:
+            rows_speed = randint(-SHELL_SPEED, SHELL_SPEED) * TIC_TIMEOUT
+            columns_speed = (SHELL_SPEED ** 2 - rows_speed ** 2) ** 0.5
+            loop.append(
+                fire(
+                    canvas,
+                    round(ss_raw),
+                    round(ss_column) + 2,
+                    rows_speed=rows_speed,
+                    columns_speed=columns_speed
+                )
+            )
+
         draw_frame(
             canvas, round(ss_raw), round(ss_column), frame, negative=False
         )
-        canvas.refresh()
-        await asyncio.sleep(TIC_TIMEOUT)
+        await sleep(1)
         draw_frame(
             canvas, round(ss_raw), round(ss_column), frame, negative=True
             )
 
 
 def draw(canvas):
+    frames = []
+    for filename in ('rocket_frame_1.txt', 'rocket_frame_2.txt'):
+        with open(os.path.join('frames', filename)) as file:
+            frames.append(file.read().rstrip())
+
     canvas.border()
     curses.curs_set(False)
     canvas.nodelay(True)
     screen_height, screen_width = canvas.getmaxyx()
-    loop = asyncio.get_event_loop()
+    sprites = []
 
     for _ in range(TOTAL_STARS):
-        loop.create_task(
+        sprites.append(
             blink(
                 canvas,
                 randint(2, screen_height - 2),
@@ -250,11 +253,21 @@ def draw(canvas):
             )
         )
 
-    loop.create_task(
-        animate_spaceship(canvas, screen_height / 2, screen_width / 2, loop)
-    )
-    loop.create_task(fill_orbit_with_garbage(canvas, loop))
-    loop.run_forever()
+    sprites.append(animate_spaceship(
+        canvas, screen_height / 2, screen_width / 2, frames, sprites
+    ))
+
+    sprites.append(fill_orbit_with_garbage(canvas, sprites))
+
+    while True:
+        for sprite in sprites.copy():
+            try:
+                sprite.send(None)
+            except StopIteration:
+                sprites.remove(sprite)
+
+        canvas.refresh()
+        time.sleep(TIC_TIMEOUT)
 
 
 if __name__ == '__main__':
