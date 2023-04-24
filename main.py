@@ -6,22 +6,10 @@ from random import randint, choice
 from itertools import cycle
 from statistics import median
 
+import config
 from physics import update_speed
-
-TIC_TIMEOUT = 0.1
-SS_SPEED = 10
-TOTAL_STARS = 100
-SHOT_PROBABILITY = 10
-MIN_GARBAGE_DELAY = 5
-MAX_GARBAGE_DELAY = 35
-SHELL_SPEED = 5
-SCREEN_BORDER_WIDTH = 1
-
-SPACE_KEY_CODE = 32
-LEFT_KEY_CODE = 260
-RIGHT_KEY_CODE = 261
-UP_KEY_CODE = 259
-DOWN_KEY_CODE = 258
+from curses_tools import draw_frame, get_frame_size, read_controls
+from obstacles import Obstacle
 
 
 async def sleep(tics=1):
@@ -37,11 +25,11 @@ async def blink(
                 curses.A_DIM, curses.A_NORMAL, curses.A_BOLD, curses.A_NORMAL
         )):
             canvas.addstr(row, column, symbol, brightness)
-            await sleep(int(delay / TIC_TIMEOUT))
+            await sleep(int(delay / config.TIC_TIMEOUT))
 
 
 async def fire(
-        canvas, start_row, start_column, rows_speed=-0.3, columns_speed=0.0
+        canvas, start_row, start_column, rows_speed=-0.5, columns_speed=0.0
 ):
     """Display animation of gun shot, direction and speed can be specified."""
 
@@ -65,6 +53,11 @@ async def fire(
     curses.beep()
 
     while 1 < row < max_row and 1 < column < max_column:
+        for obstacle in obstacles.copy():
+            if obstacle.has_collision(row, column):
+                obstacles.remove(obstacle)
+                return
+
         canvas.addstr(round(row), round(column), symbol)
         await sleep(1)
         canvas.addstr(round(row), round(column), ' ')
@@ -72,21 +65,28 @@ async def fire(
         column += columns_speed
 
 
-async def fly_garbage(canvas, column, garbage_frame, speed=0.5):
+async def fly_garbage(canvas, column, garbage_frame, speed=0.3):
     """Animate garbage, flying from top to bottom.
     Column position will stay same, as specified on start."""
     rows_number, columns_number = canvas.getmaxyx()
 
-    column = max(column, 0)
-    column = min(column, columns_number - 1)
+    rows_size, columns_size = get_frame_size(garbage_frame)
+    obstacle = Obstacle(0, column, rows_size, columns_size)
+    obstacles.append(obstacle)
 
-    row = 0
+    obstacle.column = max(column, 0)
+    obstacle.column = min(column, columns_number - 1)
 
-    while row < rows_number:
-        draw_frame(canvas, row, column, garbage_frame)
+    while obstacle.row < rows_number:
+        if obstacle not in obstacles:
+            return
+        draw_frame(canvas, obstacle.row, obstacle.column, garbage_frame)
         await sleep(1)
-        draw_frame(canvas, row, column, garbage_frame, negative=True)
-        row += speed
+        draw_frame(
+            canvas, obstacle.row, obstacle.column, garbage_frame, negative=True
+            )
+        obstacle.row += speed
+    obstacles.remove(obstacle)
 
 
 async def fill_orbit_with_garbage(canvas):
@@ -96,7 +96,7 @@ async def fill_orbit_with_garbage(canvas):
         with open(os.path.join('frames/garbage', filename)) as file:
             garbage_frames.append(file.read().rstrip())
     while True:
-        await sleep(randint(MIN_GARBAGE_DELAY, MAX_GARBAGE_DELAY))
+        await sleep(randint(config.MIN_GARBAGE_DELAY, config.MAX_GARBAGE_DELAY))
         sprites.append(
             fly_garbage(
                 canvas,
@@ -104,81 +104,6 @@ async def fill_orbit_with_garbage(canvas):
                 choice(garbage_frames),
             )
         )
-
-
-def draw_frame(canvas, start_row, start_column, text, negative=False):
-    """Draw multiline text fragment on canvas,
-    erase text instead of drawing if negative=True is specified."""
-
-    rows_number, columns_number = canvas.getmaxyx()
-
-    for row, line in enumerate(text.splitlines(), round(start_row)):
-        if row < SCREEN_BORDER_WIDTH:
-            continue
-
-        if row >= rows_number - SCREEN_BORDER_WIDTH:
-            break
-
-        for column, symbol in enumerate(line, round(start_column)):
-            if column < SCREEN_BORDER_WIDTH:
-                continue
-
-            if column >= columns_number - SCREEN_BORDER_WIDTH:
-                break
-
-            if symbol == ' ':
-                continue
-
-            # Check that current position it is not in a lower right corner of
-            # the window. Curses will raise exception in that case.
-            # Don`t ask why…
-            # https://docs.python.org/3/library/curses.html#curses.window.addch
-            if row == rows_number - 1 and column == columns_number - 1:
-                continue
-
-            symbol = symbol if not negative else ' '
-            canvas.addch(row, column, symbol)
-
-
-def read_controls(canvas):
-    """Read keys pressed and returns tuple with controls state."""
-
-    rows_direction = columns_direction = 0
-    space_pressed = False
-
-    while True:
-        pressed_key_code = canvas.getch()
-
-        if pressed_key_code == -1:
-            # https://docs.python.org/3/library/curses.html#curses.window.getch
-            break
-
-        if pressed_key_code == UP_KEY_CODE:
-            rows_direction = -1
-
-        if pressed_key_code == DOWN_KEY_CODE:
-            rows_direction = 1
-
-        if pressed_key_code == RIGHT_KEY_CODE:
-            columns_direction = 1
-
-        if pressed_key_code == LEFT_KEY_CODE:
-            columns_direction = -1
-
-        if pressed_key_code == SPACE_KEY_CODE:
-            space_pressed = True
-
-    return rows_direction, columns_direction, space_pressed
-
-
-def get_frame_size(text):
-    """Calculate size of multiline text fragment, return pair —
-    number of rows and columns."""
-
-    lines = text.splitlines()
-    rows = len(lines)
-    columns = max([len(line) for line in lines])
-    return rows, columns
 
 
 async def animate_spaceship(
@@ -195,16 +120,16 @@ async def animate_spaceship(
         frame_rows, frame_cols = get_frame_size(frame)
         ss_raw = median(
             (
-                SCREEN_BORDER_WIDTH,
-                ss_raw + row_speed * TIC_TIMEOUT * SS_SPEED,
-                screen_height - frame_rows - SCREEN_BORDER_WIDTH
+                config.SCREEN_BORDER_WIDTH,
+                ss_raw + row_speed * config.TIC_TIMEOUT * config.SS_SPEED,
+                screen_height - frame_rows - config.SCREEN_BORDER_WIDTH
             )
         )
         ss_column = median(
             (
-                SCREEN_BORDER_WIDTH,
-                ss_column + column_speed * TIC_TIMEOUT * SS_SPEED,
-                screen_width - frame_cols - SCREEN_BORDER_WIDTH
+                config.SCREEN_BORDER_WIDTH,
+                ss_column + column_speed * config.TIC_TIMEOUT * config.SS_SPEED,
+                screen_width - frame_cols - config.SCREEN_BORDER_WIDTH
             )
         )
 
@@ -237,7 +162,7 @@ def draw(canvas):
     canvas.nodelay(True)
     screen_height, screen_width = canvas.getmaxyx()
 
-    for _ in range(TOTAL_STARS):
+    for _ in range(config.TOTAL_STARS):
         sprites.append(
             blink(
                 canvas,
@@ -245,10 +170,10 @@ def draw(canvas):
                 randint(2, screen_width - 2),
                 symbol=choice(list('+*.:°')),
                 animation_schema=(
-                    TIC_TIMEOUT * randint(5, 25),
-                    TIC_TIMEOUT * randint(2, 8),
-                    TIC_TIMEOUT * randint(3, 10),
-                    TIC_TIMEOUT * randint(2, 8),
+                    config.TIC_TIMEOUT * randint(5, 25),
+                    config.TIC_TIMEOUT * randint(2, 8),
+                    config.TIC_TIMEOUT * randint(3, 10),
+                    config.TIC_TIMEOUT * randint(2, 8),
                 ),
             )
         )
@@ -267,10 +192,11 @@ def draw(canvas):
                 sprites.remove(sprite)
 
         canvas.refresh()
-        time.sleep(TIC_TIMEOUT)
+        time.sleep(config.TIC_TIMEOUT)
 
 
 if __name__ == '__main__':
     sprites = []
+    obstacles = []
     curses.update_lines_cols()
     curses.wrapper(draw)
