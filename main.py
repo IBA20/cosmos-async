@@ -167,7 +167,7 @@ async def animate_spaceship(
 
 async def game_over(canvas):
     screen_height, screen_width = canvas.getmaxyx()
-    with open(os.path.join('frame', 'game_over.txt')) as file:
+    with open(os.path.join('frames', 'game_over.txt')) as file:
         frame = file.read().rstrip()
     banner_rows, banner_columns = get_frame_size(frame)
     while True:
@@ -177,6 +177,8 @@ async def game_over(canvas):
             (screen_width - banner_columns) // 2,
             frame
         )
+        await sleep(2)
+
 
 def draw(canvas):
     frames = []
