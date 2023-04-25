@@ -48,8 +48,8 @@ async def fire(
 
     symbol = '-' if columns_speed else '|'
 
-    rows, columns = canvas.getmaxyx()
-    max_row, max_column = rows - 2, columns - 2
+    screen_height, screen_width = canvas.getmaxyx()
+    max_row, max_column = screen_height - 2, screen_width - 2
 
     curses.beep()
 
@@ -76,16 +76,16 @@ async def fire(
 async def fly_garbage(canvas, column, garbage_frame, speed=0.3):
     """Animate garbage, flying from top to bottom.
     Column position will stay same, as specified on start."""
-    rows_number, columns_number = canvas.getmaxyx()
+    screen_height, screen_width = canvas.getmaxyx()
 
     rows_size, columns_size = get_frame_size(garbage_frame)
     obstacle = Obstacle(0, column, rows_size, columns_size)
     obstacles.append(obstacle)
 
     obstacle.column = max(column, 0)
-    obstacle.column = min(column, columns_number - 1)
+    obstacle.column = min(column, screen_width - 1)
 
-    while obstacle.row < rows_number:
+    while obstacle.row < screen_height:
         if obstacle not in obstacles:
             return
         draw_frame(canvas, obstacle.row, obstacle.column, garbage_frame)
@@ -104,12 +104,17 @@ async def fill_orbit_with_garbage(canvas):
         with open(os.path.join('frames/garbage', filename)) as file:
             garbage_frames.append(file.read().rstrip())
     while not game_over:
-        await sleep(randint(config.MIN_GARBAGE_DELAY, config.MAX_GARBAGE_DELAY))
+        min_delay = config.MIN_GARBAGE_DELAY
+        max_delay = max(
+            config.MAX_GARBAGE_DELAY - (year - 1957) // 5, min_delay
+        )
+        await sleep(randint(min_delay, max_delay))
         sprites.append(
             fly_garbage(
                 canvas,
                 randint(2, screen_width - 2),
                 choice(garbage_frames),
+                0.3 + (year - 1957) // 10 / 10
             )
         )
 
@@ -141,7 +146,7 @@ async def animate_spaceship(
             )
         )
 
-        if shot:
+        if shot and year >= 2020:
             sprites.append(fire(
                 canvas,
                 round(ss_raw),
@@ -155,7 +160,11 @@ async def animate_spaceship(
         )
         
         for obstacle in obstacles:
-            if obstacle.has_collision(ss_raw, ss_column, *get_frame_size(frame)):
+            if obstacle.has_collision(
+                    ss_raw,
+                    ss_column,
+                    *get_frame_size(frame)
+            ):
                 sprites.append(set_game_over(canvas))
                 return
         
@@ -186,10 +195,10 @@ async def count_year(canvas):
     global year
     screen_height, screen_width = canvas.getmaxyx()
     year_canvas = canvas.derwin(
-        1,
-        5,
-        screen_height - config.SCREEN_BORDER_WIDTH - 1,
-        1
+        nlines=1,
+        ncols=5,
+        begin_y=screen_height - config.SCREEN_BORDER_WIDTH - 1,
+        begin_x=1
     )
     while True:
         year_canvas.addstr(0, 0, str(year))
