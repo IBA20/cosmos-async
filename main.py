@@ -153,11 +153,30 @@ async def animate_spaceship(
         draw_frame(
             canvas, round(ss_raw), round(ss_column), frame, negative=False
         )
+        
+        for obstacle in obstacles:
+            if obstacle.has_collision(ss_raw, ss_column, *get_frame_size(frame)):
+                sprites.clear()
+                sprites.append(game_over(canvas))           
+        
         await sleep(2)
         draw_frame(
             canvas, round(ss_raw), round(ss_column), frame, negative=True
             )
 
+
+async def game_over(canvas):
+    screen_height, screen_width = canvas.getmaxyx()
+    with open(os.path.join('frame', 'game_over.txt')) as file:
+        frame = file.read().rstrip()
+    banner_rows, banner_columns = get_frame_size(frame)
+    while True:
+        draw_frame(
+            canvas, 
+            (screen_height - banner_rows) // 2,
+            (screen_width - banner_columns) // 2,
+            frame
+        )
 
 def draw(canvas):
     frames = []
