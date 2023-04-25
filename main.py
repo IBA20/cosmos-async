@@ -10,6 +10,7 @@ import config
 from physics import update_speed
 from curses_tools import draw_frame, get_frame_size, read_controls
 from obstacles import Obstacle
+from explosion import explode
 
 
 async def sleep(tics=1):
@@ -56,6 +57,13 @@ async def fire(
         for obstacle in obstacles.copy():
             if obstacle.has_collision(row, column):
                 obstacles.remove(obstacle)
+                sprites.append(
+                    explode(
+                        canvas,
+                        obstacle.row + obstacle.rows_size // 2,
+                        obstacle.column + obstacle.columns_size // 2,
+                    )
+                )
                 return
 
         canvas.addstr(round(row), round(column), symbol)
