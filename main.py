@@ -103,7 +103,7 @@ async def fill_orbit_with_garbage(canvas):
     for filename in os.listdir('frames/garbage'):
         with open(os.path.join('frames/garbage', filename)) as file:
             garbage_frames.append(file.read().rstrip())
-    while True:
+    while not game_over:
         await sleep(randint(config.MIN_GARBAGE_DELAY, config.MAX_GARBAGE_DELAY))
         sprites.append(
             fly_garbage(
@@ -156,8 +156,8 @@ async def animate_spaceship(
         
         for obstacle in obstacles:
             if obstacle.has_collision(ss_raw, ss_column, *get_frame_size(frame)):
-                sprites.clear()
-                sprites.append(game_over(canvas))           
+                sprites.append(set_game_over(canvas))
+                return
         
         await sleep(2)
         draw_frame(
@@ -165,7 +165,9 @@ async def animate_spaceship(
             )
 
 
-async def game_over(canvas):
+async def set_game_over(canvas):
+    global game_over
+    game_over = True
     screen_height, screen_width = canvas.getmaxyx()
     with open(os.path.join('frames', 'game_over.txt')) as file:
         frame = file.read().rstrip()
@@ -177,7 +179,23 @@ async def game_over(canvas):
             (screen_width - banner_columns) // 2,
             frame
         )
-        await sleep(2)
+        await sleep(1)
+
+
+async def count_year(canvas):
+    global year
+    screen_height, screen_width = canvas.getmaxyx()
+    year_canvas = canvas.derwin(
+        1,
+        5,
+        screen_height - config.SCREEN_BORDER_WIDTH - 1,
+        1
+    )
+    while True:
+        year_canvas.addstr(0, 0, str(year))
+        year_canvas.refresh()
+        await sleep(int(config.YEAR_DURATION_SEC / config.TIC_TIMEOUT))
+        year += 1
 
 
 def draw(canvas):
@@ -212,6 +230,7 @@ def draw(canvas):
     ))
 
     sprites.append(fill_orbit_with_garbage(canvas))
+    sprites.append(count_year(canvas))
 
     while True:
         for sprite in sprites.copy():
@@ -225,6 +244,8 @@ def draw(canvas):
 
 
 if __name__ == '__main__':
+    year = 1957
+    game_over = False
     sprites = []
     obstacles = []
     curses.update_lines_cols()
