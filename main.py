@@ -168,7 +168,7 @@ async def animate_spaceship(
                 sprites.append(set_game_over(canvas))
                 return
         
-        await sleep(2)
+        await sleep(1)
         draw_frame(
             canvas, round(ss_raw), round(ss_column), frame, negative=True
             )
