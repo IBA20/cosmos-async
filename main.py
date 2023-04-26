@@ -26,7 +26,7 @@ async def blink(
                 curses.A_DIM, curses.A_NORMAL, curses.A_BOLD, curses.A_NORMAL
         )):
             canvas.addstr(row, column, symbol, brightness)
-            await sleep(int(delay / config.TIC_TIMEOUT))
+            await sleep(int(round(delay / config.TIC_TIMEOUT, 0)))
 
 
 async def fire(
@@ -195,12 +195,9 @@ async def count_year(canvas):
     global year
     screen_height, screen_width = canvas.getmaxyx()
     year_canvas = canvas.derwin(
-        nlines=1,
-        ncols=5,
-        begin_y=screen_height - config.SCREEN_BORDER_WIDTH - 1,
-        begin_x=1
+        1, 5, screen_height - config.SCREEN_BORDER_WIDTH - 1, 1
     )
-    while True:
+    while not game_over:
         year_canvas.addstr(0, 0, str(year))
         year_canvas.refresh()
         await sleep(int(config.YEAR_DURATION_SEC / config.TIC_TIMEOUT))
@@ -211,7 +208,8 @@ def draw(canvas):
     frames = []
     for filename in os.listdir('frames/rocket'):
         with open(os.path.join('frames/rocket', filename)) as file:
-            frames.append(file.read().rstrip())
+            frame = file.read().rstrip()
+            frames += [frame, frame]
 
     canvas.border()
     curses.curs_set(False)
